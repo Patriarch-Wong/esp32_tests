@@ -42,8 +42,8 @@ in PlatformIO). The connected USB-to-UART bridge uses the default environment:
 
 ```sh
 pio run
-pio run -t upload --upload-port /dev/cu.usbmodem5B420192791
-pio device monitor --port /dev/cu.usbmodem5B420192791
+pio run -t upload --upload-port PORT
+pio device monitor --port PORT
 ```
 
 Serial baud is 115200. The test runs automatically at boot. Send `r` to run it
@@ -59,7 +59,7 @@ FAIL or timeout. Run it with a Python interpreter that has `pyserial` installed
 (PlatformIO's Python already includes it):
 
 ```sh
-python scripts/check_serial.py --port /dev/cu.usbmodem5B420192791 --runs 3 --output .pio/opus-test.log
+python scripts/check_serial.py --port PORT --runs 3 --output .pio/opus-test.log
 ```
 
 Close other serial monitors before running this check or uploading firmware.
