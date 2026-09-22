@@ -103,6 +103,36 @@ setting in `src/main.cpp`; remember to change it before uploading the other
 board. The old `lora-a` / `lora-b` environments are commented out in
 `platformio.ini`, so those environment names are no longer active.
 
+## Serial logging
+
+`pio device monitor` now adds computer timestamps and saves serial output
+automatically through the `time` and `log2file` filters. No firmware reflash
+is needed: close and reopen the monitors from this project directory.
+
+Device A:
+
+```sh
+pio device monitor --port /dev/cu.usbmodem5B5F0216001
+```
+
+Device B (in another terminal):
+
+```sh
+pio device monitor --port /dev/cu.usbmodem5B5F0215891
+```
+
+With the installed PlatformIO 6.2.0, files are saved as
+`logs/device-monitor-YYMMDD-HHMMSS.log`. Each monitor prints its exact log path.
+Start the monitors at least two seconds apart: the built-in logger names files
+to second precision, so opening both in the same second can overwrite/mix logs.
+Other PlatformIO versions may use `platformio-device-monitor-*.log` in the
+working directory. Both `logs/` and `*.log` are ignored by Git.
+
+Logs contain the device's serial output, including PING/PONG text, RSSI, SNR,
+round-trip timing, counters, and errors. Timestamps are computer receipt times,
+not radio airtime measurements. Logging stops when the monitor closes and
+does not record to the ESP32's SD card. Use Ctrl+C to stop each monitor.
+
 ## Expected result
 
 Illustrative device A output (actual token, signal and timing vary):

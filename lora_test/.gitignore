@@ -40,6 +40,8 @@ $RECYCLE.BIN/
 *.stackdump
 
 # Temporary files, logs, and local caches
+# Serial monitor captures (including any CSV exports stored here).
+/logs/
 *.log
 *.tmp
 *.temp
