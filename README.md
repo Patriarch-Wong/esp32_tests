@@ -1,3 +1,4 @@
+# This is giga slop idk what im doing
 # ESP32 tests
 
 Standalone ESP32 experiments, each in its own project directory.
