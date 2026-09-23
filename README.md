@@ -5,6 +5,7 @@ Standalone ESP32 experiments, each in its own project directory.
 
 | Project | Description | Validation |
 | --- | --- | --- |
+| [mictospeaker_test](mictospeaker_test/) | ESP32-S3 microphone to ESP-NOW ADPCM to PDM speaker, plus capture and SD player diagnostics | Both roles boot and stream; saved logs show packet gaps and underruns; microphone noise unresolved |
 | [codec_test](codec_test/) | ESP32-S3 N16R8 Opus encode/store/decode test | UART and native USB builds passed; three hardware round trips passed over UART |
 | [codec_sdtest](codec_sdtest/) | ESP32-S3 N16R8 Opus + onboard SDMMC test with reusable C++ APIs | UART and native USB builds passed; three codec/SD hardware round trips passed |
 | [lora_test](lora_test/) | ESP32-S3 N16R8 + Core1121 868 MHz two-device PING/PONG test with manual A/B role selection | Hardware round trips confirmed; latest receive-length fix builds successfully, hardware retest pending |
