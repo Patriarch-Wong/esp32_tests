@@ -41,8 +41,10 @@ void startRadio() {
 
 #if AUDIO_TRANSMITTER
 SemaphoreHandle_t sendReady;
+QueueHandle_t mic_events;
 std::atomic<uint32_t> completed{0}, radioFailures{0};
 uint32_t submitted = 0, skipped = 0, captureErrors = 0;
+uint32_t capture_overflows = 0;
 uint32_t session = 0, sequence = 0;
 int32_t peak = 0;
 int32_t slotPeaks[2]{};
@@ -70,6 +72,11 @@ void startAudio() {
   peer.ifidx = WIFI_IF_STA;
   peer.encrypt = false;
   check(esp_now_add_peer(&peer), "add receiver");
+    Serial.printf("Receiver MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                  peer.peer_addr[0], peer.peer_addr[1], peer.peer_addr[2],
+                  peer.peer_addr[3], peer.peer_addr[4], peer.peer_addr[5]);
+    Serial.printf("Radio send wait: %lu ms\n",
+                  (unsigned long)AppConfig::radio_send_wait_ms);
   session = esp_random();
 
   i2s_config_t config{};
@@ -84,7 +91,8 @@ void startAudio() {
   config.dma_buf_count = 6;
   config.dma_buf_len = Audio::samplesPerPacket;
   config.mclk_multiple = I2S_MCLK_MULTIPLE_256;
-  check(i2s_driver_install(I2S_NUM_0, &config, 0, nullptr), "microphone I2S");
+    check(i2s_driver_install(I2S_NUM_0, &config, 16, &mic_events),
+          "microphone I2S");
   i2s_pin_config_t pins{};
   pins.mck_io_num = I2S_PIN_NO_CHANGE;
   pins.bck_io_num = AppConfig::micBclkPin;
@@ -109,6 +117,19 @@ void processAudio() {
   int32_t raw[Audio::samplesPerPacket * 2];
   size_t bytes = 0;
   const esp_err_t error = i2s_read(I2S_NUM_0, raw, sizeof(raw), &bytes, pdMS_TO_TICKS(100));
+    // Longer radio waits must not silently let captured audio overrun DMA.
+    i2s_event_t event;
+    while (xQueueReceive(mic_events, &event, 0) == pdTRUE)
+    {
+        if (event.type == I2S_EVENT_RX_Q_OVF)
+        {
+            ++capture_overflows;
+        }
+        else if (event.type == I2S_EVENT_DMA_ERROR)
+        {
+            ++captureErrors;
+        }
+    }
   Audio::Packet packet{};
   packet.signature = Audio::magic;
   packet.session = session;
@@ -140,10 +161,12 @@ void processAudio() {
     ++measuredSamples;
   }
   // Keep draining microphone DMA during RF congestion; discard stale audio.
-  if (xSemaphoreTake(sendReady, pdMS_TO_TICKS(8)) != pdTRUE) {
-    ++skipped;
-    return;
-  }
+    const TickType_t send_wait = pdMS_TO_TICKS(AppConfig::radio_send_wait_ms);
+    if (xSemaphoreTake(sendReady, send_wait) != pdTRUE)
+    {
+        ++skipped;
+        return;
+    }
   Audio::WirePacket wire;
   Audio::encode(packet, encoderState, wire);
   const esp_err_t sent = esp_now_send(AppConfig::receiverMac,
@@ -157,10 +180,13 @@ void processAudio() {
 
 void report() {
   const unsigned rms = measuredSamples ? sqrt(static_cast<double>(sumSquares) / measuredSamples) : 0;
-  Serial.printf("TX sent=%lu completed=%lu failed=%lu busy-drop=%lu I2S-errors=%lu peak=%ld/32768 rms=%u clipped=%lu/%lu Lpeak=%ld Rpeak=%ld source=%s\n",
+    Serial.printf("TX sent=%lu completed=%lu failed=%lu busy-drop=%lu "
+                  "I2S-errors=%lu DMA-overflows=%lu peak=%ld/32768 rms=%u "
+                  "clipped=%lu/%lu Lpeak=%ld Rpeak=%ld source=%s\n",
                 (unsigned long)submitted, (unsigned long)completed.load(),
                 (unsigned long)radioFailures.load(), (unsigned long)skipped,
-                (unsigned long)captureErrors, (long)peak, rms,
+                (unsigned long)captureErrors,
+                (unsigned long)capture_overflows, (long)peak, rms,
                 (unsigned long)clipped, (unsigned long)measuredSamples,
                 (long)slotPeaks[0], (long)slotPeaks[1],
                 txInput == TxInput::Microphone ? "MIC" : txInput == TxInput::Tone ? "TONE" : "SILENCE");

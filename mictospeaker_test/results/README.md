@@ -1,4 +1,21 @@
-# Diagnostic snapshot — 2026-09-23
+# Diagnostic snapshots — 2026-09-23
+
+## Unicast and 20 ms send wait
+
+The user supplied `20260923-unicast-20ms-mic.txt` after flashing the updated
+microphone firmware and reported noticeably better audio. Across its six report
+intervals (roughly 30 seconds), 1505 packets were submitted with one additional
+busy drop. Send failures, I2S errors, DMA overflows, and interval clipping counts
+were zero. Before increasing the wait from 8 ms, a live unicast reading showed
+22 busy drops among 251 blocks in one interval.
+
+The current output wiring includes a 1 kOhm series resistor, without the
+proposed 33 nF capacitor. This is not the documented RC low-pass filter.
+No matching new RX log was supplied, so these results do not quantify current
+receiver loss or underruns. The ADPCM encoder/decoder matched Python audioop
+for all 356 reference cases; the codec was not changed.
+
+## Earlier broadcast baseline
 
 The two text logs contain a simultaneous 60-second capture at 115200 baud.
 Both boards booted with their correct roles, AUD2 ADPCM, and Wi-Fi channel 6.

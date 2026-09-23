@@ -49,11 +49,11 @@ pio run
 pio device list
 
 # Upload with explicit CLI ports.
-pio run -e mic_tx -t upload --upload-port /dev/cu.usbmodem5B420187371
+pio run -e mic_tx -t upload --upload-port /dev/cu.usbmodem5B5F0215891
 pio run -e speaker_rx -t upload --upload-port /dev/cu.usbmodem5B420192791
 
 # Monitor either board at 115200 baud.
-pio device monitor -e mic_tx --port /dev/cu.usbmodem5B420187371
+pio device monitor -e mic_tx --port /dev/cu.usbmodem5B5F0215891
 pio device monitor -e speaker_rx --port /dev/cu.usbmodem5B420192791
 ```
 
@@ -61,11 +61,11 @@ Pass the port on the command line; no ports are saved in `platformio.ini`:
 
 | Environment | Port |
 | --- | --- |
-| `mic_tx` | `/dev/cu.usbmodem5B420187371` |
+| `mic_tx` | `/dev/cu.usbmodem5B5F0215891` |
 | `speaker_rx` | `/dev/cu.usbmodem5B420192791` |
 
-The speaker mapping comes from `speaker_test`; the remaining adapter is assigned
-to the microphone. This role assignment has not been physically verified.
+These ports were used for the latest microphone and speaker checks. USB paths
+can change after replacing a board or adapter; confirm them with `pio device list`.
 Use separate terminals to monitor both boards. If ports change, use the new
 paths with `--upload-port PORT` / `--port PORT`.
 
@@ -75,11 +75,15 @@ USB ports differ from the UART ports above. Close serial monitors before uploadi
 If download mode fails, hold BOOT, tap RESET, release BOOT, then retry.
 
 Power both boards: the microphone sends automatically and the speaker plays
-automatically. No MAC addresses need to be entered for the default broadcast mode.
+automatically. The transmitter targets the speaker station MAC
+`E0:72:A1:D7:F6:50`, recorded in the saved speaker log. If the speaker board is
+replaced, update `receiverMac` with its printed station MAC before flashing the mic.
 Flash each board with its own role; flashing the same role to both will not work.
 **Reflash both boards for AUD2 ADPCM.** The previous AUD1 PCM firmware is
 incompatible and is deliberately rejected. The ADPCM firmware has been
-compile-checked; its live RF/audio operation still needs testing on the two boards.
+compile-checked and tested on both boards. The user reports noticeably better
+live speech after unicast and the 20 ms send-wait change; clarity is still being
+evaluated.
 
 ## Settings and diagnostics
 
@@ -91,20 +95,30 @@ Edit `include/app_config.h`:
 - `speakerUpsampleFactor`: initially 3, for 48 kHz speaker playback of the 16 kHz
   stream. Set to 1 to compare against the original 16 kHz output; reflash only
   the speaker after both boards have AUD2. The user reports a clearer local tone
-  and less hiss at 48 kHz, but live audio still needs verification with ADPCM.
+  and less hiss at 48 kHz; subsequent ADPCM/unicast testing also improved live audio.
 - `wifiChannel`: initially 6; both boards must use the same channel.
-- `receiverMac`: initially broadcast. For unicast, copy the speaker's printed
-  **station MAC** here and rebuild the microphone firmware.
+- `radio_send_wait_ms`: 20 ms maximum wait for the preceding send callback. A live
+  unicast diagnostic with the previous 8 ms wait dropped 22 of 251 blocks in
+  five seconds before encoding. This change allows more retry time; compare
+  `busy-drop` deltas and RX loss/underruns to check whether it helps. Also check
+  that `DMA-overflows` remains zero and about 250 blocks are submitted every
+  five seconds: fewer busy drops alone do not prove recording is keeping up.
+- `receiverMac`: `E0:72:A1:D7:F6:50` for unicast to the recorded speaker board.
+  Unicast enables MAC acknowledgements/retries to reduce packet loss. Copy a
+  replacement speaker's printed **station MAC** here and rebuild the microphone
+  firmware; use all `0xff` bytes to restore broadcast.
 - `transmitterMac`: optional receiver filter for the microphone's station MAC.
   All zeros accepts the first active sender, with a two-second source timeout.
 - Pins and `micLeftChannel`: already set to the confirmed wiring above.
 
-The link is unencrypted. Broadcast send completion confirms radio transmission,
-not that the speaker received it; use the receiver's packet count to verify that.
+The link is unencrypted. Unicast send completion confirms MAC-layer delivery,
+not successful audio playback; use receiver loss/underrun counters and listen to
+the radio test tone to verify improvement. In broadcast mode, send completion
+confirms radio transmission, not that the speaker received it.
 A MAC filter or unicast destination alone does not add encryption.
 
 Every five seconds, the microphone prints sent/completed/failed packet counts,
-busy drops, capture errors, recent PCM peak/RMS, clipped samples, and raw left/right slot peaks. The speaker prints received,
+busy drops, capture errors, DMA overflows, recent PCM peak/RMS, clipped samples, and raw left/right slot peaks. The speaker prints received,
 missing/stale packets, queue drops, underruns, concealed gaps, I2S errors, and buffered packets.
 
 - **RX packets stays at zero:** check roles, power, channel, distance, and any MAC
@@ -117,7 +131,20 @@ missing/stale packets, queue drops, underruns, concealed gaps, I2S errors, and b
 
 ## Diagnose static
 
-Reflash **both boards** after the capture/radio changes. Close monitors first.
+The saved ADPCM logs show 146 missing packets and 108 underruns in about 55
+seconds, alongside occasional full-scale microphone samples. The transmitter
+now uses unicast to test whether MAC acknowledgements/retries reduce the radio
+loss. Reflash only the microphone for this change if both boards already run
+AUD2. With unicast and the 20 ms wait, the latest supplied TX readings show
+1505 submitted blocks and only one additional busy drop over roughly 30 seconds,
+with no send failures, DMA overflows, I2S errors, or clipped samples in those
+readings. The user reports noticeably better audio. Fresh RX statistics are
+still needed to quantify receiver loss/underruns. Compare `t` on the mic (radio tone)
+against `a` (real mic): clean radio tone with crackling speech points back to
+capture rather than packet delivery.
+
+For the earlier AUD1-to-AUD2 upgrade, reflash **both boards**. The latest
+unicast/send-wait change only requires reflashing the mic. Close monitors first.
 Then open the speaker monitor using its explicit CLI port above and send:
 
 - `t`: continuous local 500 Hz test tone, bypassing microphone and radio audio.
@@ -149,6 +176,28 @@ to PCM before hardware PCM-to-PDM conversion. Espressif specifies a low-pass fil
 to an analog power amplifier; the module's input filtering has not been verified.
 See [Espressif PDM TX line modes](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-reference/peripherals/i2s.html#pdm-tx-mode).
 
+For the steady hiss, if GPIO 7 currently connects straight to the powered
+module's S input without an external filter, a first hardware experiment is:
+
+```text
+GPIO 7 ---- 1 kOhm ----+---- speaker module S
+                      |
+                     33 nF
+                      |
+                 common GND
+```
+
+Power off before rewiring. This is a single-pole RC low-pass with an unloaded
+cutoff of about 4.8 kHz; the module's input impedance can alter the response.
+It attenuates PDM switching content and also softens the highest audio frequencies.
+These values are a starting experiment, not a measured fix for this module.
+The current user setup has only the 1 kOhm series resistor, without the 33 nF
+capacitor; the resistor alone is not this RC filter.
+Compare `s` and `t` on the speaker before/after at the same physical volume.
+Digital filtering or a microphone noise gate cannot remove hiss that remains
+when the speaker locally generates digital silence. If one RC stage is
+insufficient, the output circuit needs further investigation.
+
 The user reports clearer MP3 playback on the same wiring, hiss during local tone
 and digital silence, and no hiss with PDM stopped. That isolates a dependence on
 active PDM but does not prove the external filter is the sole cause. The receiver
@@ -159,7 +208,7 @@ driver changes its internal interpolation ratio with the PCM sample rate, so
 this test changes that ratio from 6 to 2 while retaining the nominal 6.144 MHz
 PDM clock. No clock-divider override was added.
 
-The remaining live audio is reported as broken/crackling, with earlier RX logs
+Before the unicast/send-wait update, live audio was broken/crackling, with RX logs
 showing about 14% sequence gaps and TX logs showing busy drops. AUD2 reduces
 packet frequency and bandwidth to test whether this improves continuity. It
 does not denoise the microphone or guarantee radio delivery.
@@ -199,7 +248,7 @@ step indices, and unsupported rates/counts are rejected before decoding.
 The microphone captures both 32-bit I2S slots, selects the left slot in software,
 and scales/clamps to PCM16. SD has an internal pull-down for inactive slots.
 ESP-NOW uses a 6 Mbps PHY rate to reduce airtime. The sender permits one send in
-flight and waits up to 8 ms for completion before dropping a block; microphone
+flight and waits up to 20 ms for completion before dropping a block; microphone
 DMA continues capturing during this bounded wait. The receiver validates packets in the Wi-Fi
 callback and queues compressed blocks; decoding and playback run separately in
 the Arduino loop through I2S DMA. It starts with three queued packets (60 ms),
@@ -207,8 +256,9 @@ keeps at most six (120 ms), and drops oldest
 queued data when full, rejects duplicate/out-of-order sequence numbers, and
 handles a transmitter reboot using the session ID. Short gaps are filled with
 a fade to silence and a fade back into received audio; concealment is bounded
-by available queue headroom. Queue starvation outputs silence and buffers again. No retransmission or
-clock-drift resampling is implemented. Actual latency and audio quality require
+by available queue headroom. Queue starvation outputs silence and buffers again.
+Unicast uses the radio's MAC-layer retries; no application-layer retransmission
+or clock-drift resampling is implemented. Actual latency and audio quality require
 hardware measurement.
 
 ## Checks

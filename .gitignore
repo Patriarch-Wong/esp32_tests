@@ -1,3 +1,6 @@
+# Local test music: exclude Love Sosa in any format or directory.
+*[Ll]ove[ _-][Ss]osa*.*
+
 # Build output and local tooling
 .pio/
 build/

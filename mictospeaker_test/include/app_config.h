@@ -20,9 +20,14 @@ constexpr int speakerVolumePercent = 15;
 // Microphone capture and ESP-NOW packets remain at 16 kHz in either case.
 constexpr unsigned speakerUpsampleFactor = 3;
 constexpr uint8_t wifiChannel = 6;  // Must match on both boards.
-// Broadcast needs no MAC setup. Replace with speaker station MAC for unicast.
+// Allow one 20 ms audio block for unicast acknowledgements/retries. The earlier
+// 8 ms wait dropped ~9% of captured blocks in a live diagnostic.
+constexpr uint32_t radio_send_wait_ms = 20;
+// Speaker station MAC from the 2026-09-23 diagnostic snapshot.
+// Unicast enables MAC acknowledgements/retries to reduce radio dropouts.
+// Update if the speaker board is replaced; all 0xff restores broadcast.
 // Neither mode enables encryption in this prototype.
-constexpr uint8_t receiverMac[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+constexpr uint8_t receiverMac[6] = {0xe0, 0x72, 0xa1, 0xd7, 0xf6, 0x50};
 // Optional source filter: all zeros accepts the first active transmitter.
 constexpr uint8_t transmitterMac[6] = {0, 0, 0, 0, 0, 0};
 }  // namespace AppConfig
