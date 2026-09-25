@@ -1,5 +1,8 @@
 # SD-card video player for the ST7789 LCD
 
+For H.264/AAC playback while receiving into RAM, with no receiver SD card,
+use the separate [wireless_stream project](wireless_stream/README.md).
+
 For the two-board ESP-NOW transfer with receiver video and GPIO8 audio,
 use the separate [wireless_av project](wireless_av/README.md).
 

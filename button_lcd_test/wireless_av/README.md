@@ -1,5 +1,9 @@
 # ESP-NOW SD video and audio player
 
+For the smaller H.264/AAC format and playback while receiving into RAM,
+see [wireless_stream](../wireless_stream/README.md). That variant needs an
+SD card only on the sender; this project's behavior remains as below.
+
 Two ESP32-S3 N16R8 builds transfer a complete clip to the receiving board's
 SD card, verify the saved file, then play video and audio together there.
 This is file transfer followed by playback, not a live radio stream.
